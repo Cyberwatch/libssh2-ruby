@@ -145,6 +145,33 @@ channel_get_exit_status(VALUE self) {
 
 /*
  * call-seq:
+ *     channel.get_exit_signal -> string
+ *
+ * Returns the name of the exit signal (without the leading SIG), or nil if the
+ * program exited cleanly.
+ * */
+static VALUE
+channel_get_exit_signal(VALUE self) {
+    char *exit_signal = NULL;
+    size_t exit_signal_len;
+    int rc = libssh2_channel_get_exit_signal(
+        get_channel(self),
+        &exit_signal, &exit_signal_len,
+        NULL, NULL, /* errmsg */
+        NULL, NULL /* langtag */
+    );
+    if (rc != 0) {
+        rb_exc_raise(libssh2_ruby_wrap_error(rc));
+        return Qnil;
+    }
+
+    VALUE signal_name_rb = rb_str_new(exit_signal, exit_signal_len);
+    free(exit_signal);
+    return signal_name_rb;
+}
+
+/*
+ * call-seq:
  *     channel.read -> string
  *
  * Reads from the channel. This will return the data as a string. This will
@@ -224,6 +251,7 @@ void init_libssh2_channel() {
     rb_define_method(cChannel, "exec", channel_exec, 1);
     rb_define_method(cChannel, "eof", channel_eof, 0);
     rb_define_method(cChannel, "get_exit_status", channel_get_exit_status, 0);
+    rb_define_method(cChannel, "get_exit_signal", channel_get_exit_signal, 0);
     rb_define_method(cChannel, "read", channel_read, 1);
     rb_define_method(cChannel, "read_ex", channel_read_ex, 2);
     rb_define_method(cChannel, "wait_closed", channel_wait_closed, 0);

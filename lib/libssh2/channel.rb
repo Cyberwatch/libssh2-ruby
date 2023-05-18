@@ -93,6 +93,14 @@ module LibSSH2
     #
     def exit_status = @native_channel.get_exit_status
 
+    # Get the exit signal reported by the remote host. You should only call
+    # this function after {#wait}.
+    #
+    # @return [String] Name of the signal without the leading `SIG`. nil if the
+    #   remote process exited cleanly.
+    #
+    def exit_signal = @native_channel.get_exit_signal
+
     # Attempts reading from specific streams on the channel. This will not
     # block if data is unavailable. This typically doesn't need to be
     # called publicly but can be if you'd like. If data is found, it will
