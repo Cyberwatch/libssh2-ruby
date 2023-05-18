@@ -127,6 +127,8 @@ module LibSSH2
       continue_conditional = block || Proc.new { !@channels.empty? }
 
       Kernel.loop do
+        waitsocket
+
         # Remove any channels that are closed
         @channels.delete_if { |c| c.closed? }
 

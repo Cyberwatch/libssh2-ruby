@@ -107,8 +107,8 @@ module LibSSH2
       return false if @native_channel.eof
 
       # Attempt to read from stdout/stderr
-      @session.blocking_call { read_stream(STREAM_DATA) }
-      @session.blocking_call { read_stream(STREAM_EXTENDED_DATA) }
+      read_stream(STREAM_DATA)
+      read_stream(STREAM_EXTENDED_DATA)
 
       # Return true always
       true
@@ -123,7 +123,10 @@ module LibSSH2
     # This method will also implicitly call {#close}.
     def wait
       # Read all the data
-      loop { break if !attempt_read }
+      loop do
+        @session.waitsocket
+        break if !attempt_read
+      end
 
       # Close our end, we won't be sending any more requests.
       close if !closed?

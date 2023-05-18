@@ -168,9 +168,7 @@ channel_read(VALUE self, VALUE buffer_size) {
 static VALUE
 channel_read_ex(VALUE self, VALUE rb_stream_id, VALUE rb_buffer_size) {
     int result;
-    char *buffer;
     int stream_id;
-    long buffer_size;
     LIBSSH2_CHANNEL *channel = get_channel(self);
 
     // Check types
@@ -184,17 +182,12 @@ channel_read_ex(VALUE self, VALUE rb_stream_id, VALUE rb_buffer_size) {
         return Qnil;
     }
 
-    buffer_size = NUM2LONG(rb_buffer_size);
-    if (buffer_size <= 0) {
-        rb_raise(rb_eArgError, "buffer size must be greater than 0");
-        return Qnil;
-    }
-
     // Create our buffer
-    buffer = (char *)malloc(buffer_size);
+    size_t buffer_size = NUM2SIZET(rb_buffer_size);
+    char buffer[buffer_size];
 
     // Read from the channel
-    result = libssh2_channel_read_ex(channel, stream_id, buffer, sizeof(buffer));
+    result = libssh2_channel_read_ex(channel, stream_id, buffer, buffer_size);
 
     if (result > 0) {
         // Read succeeded. Create a string with the correct number of
