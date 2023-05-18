@@ -121,12 +121,29 @@ module LibSSH2
     # the thread that `wait` is called on.
     #
     # This method will also implicitly call {#close}.
+    #
+    # An optionnal block can be given to perform an action between iterations.
+    # Breaking from that block cancels the wait and causes the function to
+    # return without closing the channel. The interval between iterations is
+    # unspecified, and may range from a few milliseconds to a seconds.
+    #
+    # @return [Boolean] True if the channel was successfully closed, or false if the wait
+    #   was cancelled by the given block.
+    #
     def wait
-      # Read all the data
       loop do
         @session.waitsocket
-        break if !attempt_read
+        attempt_read
+
+        # Check EOF again to avoid calling waitsocket for nothing.
+        break if @native_channel.eof
+
+        yield if block_given?
       end
+
+      # If the loop was broken because of EOF, close the channel. Otherwise, it
+      # means the given block cancelled the wait loop.
+      return false unless @native_channel.eof
 
       # Close our end, we won't be sending any more requests.
       close if !closed?
@@ -137,6 +154,8 @@ module LibSSH2
       # Grab our exit status if we care about it
       exit_status_cb = @stream_callbacks[:exit_status]
       exit_status_cb.call(@native_channel.get_exit_status) if exit_status_cb
+
+      true
     end
 
     protected
