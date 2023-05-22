@@ -171,6 +171,12 @@ module LibSSH2
       end
     end
 
+    # Send EOF to indicate we have no more data to {#write}. Closes stdin on
+    # the remote process.
+    def send_eof
+      @session.blocking_call { @native_channel.send_eof }
+    end
+
     protected
 
     # This will read from the given stream ID and call the proper

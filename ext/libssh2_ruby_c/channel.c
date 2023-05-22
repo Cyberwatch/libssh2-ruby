@@ -258,6 +258,22 @@ channel_write_ex(VALUE self, VALUE rb_stream_id, VALUE rb_buffer) {
 
 /*
  * call-seq:
+ *     channel.send_eof -> nil
+ *
+ * Output EOF on the channel to indicate we have no more data to write. In
+ * practice, closes stdin on the remote process.
+ */
+static VALUE
+channel_send_eof(VALUE self) {
+    LIBSSH2_CHANNEL *channel = get_channel(self);
+    int rc = libssh2_channel_send_eof(channel);
+    if (rc != 0)
+        rb_exc_raise(libssh2_ruby_wrap_error(rc));
+    return Qnil;
+}
+
+/*
+ * call-seq:
  *     channel.wait_closed -> true
  *
  * This blocks until the channel receives a CLOSE message from the remote
@@ -281,5 +297,6 @@ void init_libssh2_channel() {
     rb_define_method(cChannel, "read", channel_read, 1);
     rb_define_method(cChannel, "read_ex", channel_read_ex, 2);
     rb_define_method(cChannel, "write_ex", channel_write_ex, 2);
+    rb_define_method(cChannel, "send_eof", channel_send_eof, 0);
     rb_define_method(cChannel, "wait_closed", channel_wait_closed, 0);
 }
