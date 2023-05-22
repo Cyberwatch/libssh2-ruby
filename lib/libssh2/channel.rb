@@ -86,14 +86,20 @@ module LibSSH2
       @stream_callbacks[STREAM_EXTENDED_DATA] = callback
     end
 
-    # Specify a callback that is called when the exit status is
-    # received on this channel.
+    # Get the exit status reported by the remote host. You should only call
+    # this function after {#wait}.
     #
-    # @yield [exit_status] Called once when the exit status is received with
-    #   the exit status.
-    def on_exit_status(&callback)
-      @stream_callbacks[:exit_status] = callback
-    end
+    # @return [Integer] Exit code, or 0 if not yet available.
+    #
+    def exit_status = @native_channel.get_exit_status
+
+    # Get the exit signal reported by the remote host. You should only call
+    # this function after {#wait}.
+    #
+    # @return [String] Name of the signal without the leading `SIG`. nil if the
+    #   remote process exited cleanly.
+    #
+    def exit_signal = @native_channel.get_exit_signal
 
     # Attempts reading from specific streams on the channel. This will not
     # block if data is unavailable. This typically doesn't need to be
@@ -107,8 +113,8 @@ module LibSSH2
       return false if @native_channel.eof
 
       # Attempt to read from stdout/stderr
-      @session.blocking_call { read_stream(STREAM_DATA) }
-      @session.blocking_call { read_stream(STREAM_EXTENDED_DATA) }
+      read_stream(STREAM_DATA)
+      read_stream(STREAM_EXTENDED_DATA)
 
       # Return true always
       true
@@ -121,9 +127,29 @@ module LibSSH2
     # the thread that `wait` is called on.
     #
     # This method will also implicitly call {#close}.
+    #
+    # An optionnal block can be given to perform an action between iterations.
+    # Breaking from that block cancels the wait and causes the function to
+    # return without closing the channel. The interval between iterations is
+    # unspecified, and may range from a few milliseconds to a seconds.
+    #
+    # @return [Boolean] True if the channel was successfully closed, or false if the wait
+    #   was cancelled by the given block.
+    #
     def wait
-      # Read all the data
-      loop { break if !attempt_read }
+      loop do
+        @session.waitsocket
+        attempt_read
+
+        # Check EOF again to avoid calling waitsocket for nothing.
+        break if @native_channel.eof
+
+        yield if block_given?
+      end
+
+      # If the loop was broken because of EOF, close the channel. Otherwise, it
+      # means the given block cancelled the wait loop.
+      return false unless @native_channel.eof
 
       # Close our end, we won't be sending any more requests.
       close if !closed?
@@ -131,9 +157,24 @@ module LibSSH2
       # Wait for the remote end to close
       @session.blocking_call { @native_channel.wait_closed }
 
-      # Grab our exit status if we care about it
-      exit_status_cb = @stream_callbacks[:exit_status]
-      exit_status_cb.call(@native_channel.get_exit_status) if exit_status_cb
+      true
+    end
+
+    # Write the given data in the output data stream, which usually maps to
+    # stdin of the remote process.
+    def write(data)
+      until data.empty?
+        written = @session.blocking_call do
+          @native_channel.write_ex(STREAM_DATA, data)
+        end
+        data = data.byteslice(written..)
+      end
+    end
+
+    # Send EOF to indicate we have no more data to {#write}. Closes stdin on
+    # the remote process.
+    def send_eof
+      @session.blocking_call { @native_channel.send_eof }
     end
 
     protected

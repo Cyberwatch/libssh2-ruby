@@ -145,6 +145,33 @@ channel_get_exit_status(VALUE self) {
 
 /*
  * call-seq:
+ *     channel.get_exit_signal -> string
+ *
+ * Returns the name of the exit signal (without the leading SIG), or nil if the
+ * program exited cleanly.
+ * */
+static VALUE
+channel_get_exit_signal(VALUE self) {
+    char *exit_signal = NULL;
+    size_t exit_signal_len;
+    int rc = libssh2_channel_get_exit_signal(
+        get_channel(self),
+        &exit_signal, &exit_signal_len,
+        NULL, NULL, /* errmsg */
+        NULL, NULL /* langtag */
+    );
+    if (rc != 0) {
+        rb_exc_raise(libssh2_ruby_wrap_error(rc));
+        return Qnil;
+    }
+
+    VALUE signal_name_rb = rb_str_new(exit_signal, exit_signal_len);
+    free(exit_signal);
+    return signal_name_rb;
+}
+
+/*
+ * call-seq:
  *     channel.read -> string
  *
  * Reads from the channel. This will return the data as a string. This will
@@ -168,9 +195,7 @@ channel_read(VALUE self, VALUE buffer_size) {
 static VALUE
 channel_read_ex(VALUE self, VALUE rb_stream_id, VALUE rb_buffer_size) {
     int result;
-    char *buffer;
     int stream_id;
-    long buffer_size;
     LIBSSH2_CHANNEL *channel = get_channel(self);
 
     // Check types
@@ -184,17 +209,12 @@ channel_read_ex(VALUE self, VALUE rb_stream_id, VALUE rb_buffer_size) {
         return Qnil;
     }
 
-    buffer_size = NUM2LONG(rb_buffer_size);
-    if (buffer_size <= 0) {
-        rb_raise(rb_eArgError, "buffer size must be greater than 0");
-        return Qnil;
-    }
-
     // Create our buffer
-    buffer = (char *)malloc(buffer_size);
+    size_t buffer_size = NUM2SIZET(rb_buffer_size);
+    char buffer[buffer_size];
 
     // Read from the channel
-    result = libssh2_channel_read_ex(channel, stream_id, buffer, sizeof(buffer));
+    result = libssh2_channel_read_ex(channel, stream_id, buffer, buffer_size);
 
     if (result > 0) {
         // Read succeeded. Create a string with the correct number of
@@ -209,6 +229,48 @@ channel_read_ex(VALUE self, VALUE rb_stream_id, VALUE rb_buffer_size) {
     }
 }
 
+/*
+ * call-seq:
+ *     channel.write("hello") -> Numeric
+ *
+ * Write data into the specified stream.
+ *
+ * Returns the number of bytes written. The caller must call this function in a
+ * loop to ensure all its data ends up being written.
+ */
+static VALUE
+channel_write_ex(VALUE self, VALUE rb_stream_id, VALUE rb_buffer) {
+    LIBSSH2_CHANNEL *channel = get_channel(self);
+    rb_check_type(rb_stream_id, T_FIXNUM);
+    rb_check_type(rb_buffer, T_STRING);
+
+    ssize_t rc =
+        libssh2_channel_write_ex(channel, NUM2INT(rb_stream_id),
+                                 RSTRING_PTR(rb_buffer), RSTRING_LEN(rb_buffer));
+
+    if (rc < 0) {
+        rb_exc_raise(libssh2_ruby_wrap_error(rc));
+        return Qnil;
+    }
+
+    return SSIZET2NUM(rc);
+}
+
+/*
+ * call-seq:
+ *     channel.send_eof -> nil
+ *
+ * Output EOF on the channel to indicate we have no more data to write. In
+ * practice, closes stdin on the remote process.
+ */
+static VALUE
+channel_send_eof(VALUE self) {
+    LIBSSH2_CHANNEL *channel = get_channel(self);
+    int rc = libssh2_channel_send_eof(channel);
+    if (rc != 0)
+        rb_exc_raise(libssh2_ruby_wrap_error(rc));
+    return Qnil;
+}
 
 /*
  * call-seq:
@@ -231,7 +293,10 @@ void init_libssh2_channel() {
     rb_define_method(cChannel, "exec", channel_exec, 1);
     rb_define_method(cChannel, "eof", channel_eof, 0);
     rb_define_method(cChannel, "get_exit_status", channel_get_exit_status, 0);
+    rb_define_method(cChannel, "get_exit_signal", channel_get_exit_signal, 0);
     rb_define_method(cChannel, "read", channel_read, 1);
     rb_define_method(cChannel, "read_ex", channel_read_ex, 2);
+    rb_define_method(cChannel, "write_ex", channel_write_ex, 2);
+    rb_define_method(cChannel, "send_eof", channel_send_eof, 0);
     rb_define_method(cChannel, "wait_closed", channel_wait_closed, 0);
 }
