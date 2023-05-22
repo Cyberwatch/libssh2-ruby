@@ -229,6 +229,32 @@ channel_read_ex(VALUE self, VALUE rb_stream_id, VALUE rb_buffer_size) {
     }
 }
 
+/*
+ * call-seq:
+ *     channel.write("hello") -> Numeric
+ *
+ * Write data into the specified stream.
+ *
+ * Returns the number of bytes written. The caller must call this function in a
+ * loop to ensure all its data ends up being written.
+ */
+static VALUE
+channel_write_ex(VALUE self, VALUE rb_stream_id, VALUE rb_buffer) {
+    LIBSSH2_CHANNEL *channel = get_channel(self);
+    rb_check_type(rb_stream_id, T_FIXNUM);
+    rb_check_type(rb_buffer, T_STRING);
+
+    ssize_t rc =
+        libssh2_channel_write_ex(channel, NUM2INT(rb_stream_id),
+                                 RSTRING_PTR(rb_buffer), RSTRING_LEN(rb_buffer));
+
+    if (rc < 0) {
+        rb_exc_raise(libssh2_ruby_wrap_error(rc));
+        return Qnil;
+    }
+
+    return SSIZET2NUM(rc);
+}
 
 /*
  * call-seq:
@@ -254,5 +280,6 @@ void init_libssh2_channel() {
     rb_define_method(cChannel, "get_exit_signal", channel_get_exit_signal, 0);
     rb_define_method(cChannel, "read", channel_read, 1);
     rb_define_method(cChannel, "read_ex", channel_read_ex, 2);
+    rb_define_method(cChannel, "write_ex", channel_write_ex, 2);
     rb_define_method(cChannel, "wait_closed", channel_wait_closed, 0);
 }

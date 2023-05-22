@@ -160,6 +160,17 @@ module LibSSH2
       true
     end
 
+    # Write the given data in the output data stream, which usually maps to
+    # stdin of the remote process.
+    def write(data)
+      until data.empty?
+        written = @session.blocking_call do
+          @native_channel.write_ex(STREAM_DATA, data)
+        end
+        data = data.byteslice(written..)
+      end
+    end
+
     protected
 
     # This will read from the given stream ID and call the proper
